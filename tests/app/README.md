@@ -1,0 +1,11 @@
+# tests/app
+
+QA-owned adversarial tests for `src/app/**` (server actions), run with `bun test`. Implementers keep their unit tests next to the code under `src/`.
+
+## QA adversarial tests for T12 (cart server actions)
+
+- `actions.qa.test.ts`: drives `createCartActions` with a real `CartService` over `createDatabase(":memory:")` + `runMigrations` + `seedProducts`, a counting `getSessionId` mock and a `revalidate` spy. Each test builds its own DB.
+- Covers: 27 hostile forms per quantity action (missing fields, `File`/`Blob` entries, 129-char productId, full-width and Arabic-Indic digits, `1e2`, `-1`, `+1`, `1.0`, `1000`, `" 2"`, `"2\n"`, hex, `Infinity`, `NaN`, 1 MB digit string, NUL suffix, invalid-first duplicate keys), each asserting `INVALID_INPUT`, a byte-identical `carts`/`cart_items` snapshot, zero `getSessionId` calls and zero revalidations; every service error code with exact user-safe message and a leak regex (SQL, sqlite, stack frames, `Error:`); `INSUFFICIENT_STOCK` with `available` 0; a Proxy-wrapped `FormData` that records every property access to prove only `CART_FIELD` keys are read; extra `price`/`subtotalCents`/`sessionId`/`quantityCents`/`sf_session` fields have no effect; bogus `prevState`; exact revalidate list on success; JSON round-trips; closed-DB rethrow.
+- Documented behaviour (orchestrator rulings): invalid input short-circuits before `getSessionId`; `"0"`/`"100"`/`"999"` parse and fail in the service as `INVALID_QUANTITY`; duplicate keys use the first value (`FormData.get`); productId is trimmed but quantity is not; unexpected exceptions are rethrown.
+- Wiring: mocks `next/headers` and `next/cache` with `mock.module` at the top of the file (before importing `@/app/actions/cart`), sets `DATABASE_PATH=":memory:"`, and asserts the first `addToCart` sets `sf_session` once (UUID v4, `httpOnly`, `sameSite: "lax"`, `path: "/"`), a second add reuses it, a client `sessionId` field is ignored, and invalid input mints no cookie. `mock.module` is process-wide; the mocks delegate to per-test state in this file and coexist with `src/app/actions/cart.test.ts` and `tests/server/session.qa.test.ts`.
+- Snapshots compare full rows (including timestamps) within one DB; cross-DB comparisons use business columns only.

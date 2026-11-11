@@ -1,0 +1,8 @@
+# Bun 1.4.4 has no built-in DOM test environment option, so the DOM is
+# registered globally by preload scripts. Order matters: happydom.ts must run
+# before anything imports @testing-library/*. next-module-pins.ts pins the
+# export lists of the commonly mocked next/* modules (see src/test/README.md).
+# Child processes started by scripts/test-sharded.ts (`bun run test`) read this
+# file from the working directory, so they get the same preloads.
+[test]
+preload = ["./src/test/happydom.ts", "./src/test/setup.ts", "./src/test/next-module-pins.ts"]
